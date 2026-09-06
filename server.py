@@ -4,14 +4,14 @@ import os
 import websockets
 from http import HTTPStatus
 
-# Struttura ROOMS:
 # { "nome_stanza": { "password": "123", "clients": { websocket: "nome_utente" } } }
 ROOMS = {}
 
-# Gestore HTTP per rispondere ai pings di keepalive (200 OK)
-async def process_request(path, headers):
-    if path == "/ping" or path == "/":
-        return HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
+async def process_request(connection, request):
+    # Gestisce il ping HTTP di cron-job.org senza interferire con i WebSocket dell'app
+    if request.path == "/ping" or request.path == "/":
+        return connection.respond(HTTPStatus.OK, "OK\n")
+    # Restituendo None, lascia proseguire normalmente le connessioni WebSocket dell'app
     return None
 
 async def handler(websocket):
@@ -35,7 +35,7 @@ async def handler(websocket):
                                 pass
                 continue
 
-            # Gestione JSON
+            # Gestione messaggi JSON (Login / Stanza)
             try:
                 data = json.loads(message)
                 if data.get("type") == "join":
@@ -59,7 +59,7 @@ async def handler(websocket):
                     ROOMS[room]["clients"][websocket] = username
                     
                     await websocket.send(json.dumps({"type": "joined", "room": room}))
-                    print(f"[{room}] Utente '{username}' connesso.")
+                    print(f"[{room}] Utente '{username}' connesso con successo.")
 
             except json.JSONDecodeError:
                 pass
@@ -75,7 +75,6 @@ async def handler(websocket):
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
-    # process_request intercetta HTTP GET prima del handshake WebSocket
     async with websockets.serve(
         handler, 
         "0.0.0.0", 
