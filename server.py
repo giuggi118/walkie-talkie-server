@@ -8,12 +8,11 @@ from http import HTTPStatus
 # { "nome_stanza": { "password": "123", "clients": { websocket: "nome_utente" } } }
 ROOMS = {}
 
-# Intercetta le richieste HTTP (es. /ping da cron-job.org) prima che vengano convertite in WebSocket
+# Intercetta qualsiasi richiesta HTTP GET/POST/HEAD e risponde 200 OK
 async def process_request(path, headers):
-    if path == "/ping" or path == "/":
-        # Risponde 200 OK alle chiamate HTTP GET mantenendo il server attivo su Render
+    # Risponde 200 OK a qualsiasi ping o chiamata HTTP sulla radice o /ping
+    if path in ["/ping", "/", "/process_request"]:
         return HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
-    # Prosegue con la normale connessione WebSocket per tutti gli altri percorsi
     return None
 
 async def handler(websocket):
