@@ -2,10 +2,19 @@ import asyncio
 import json
 import os
 import websockets
+from http import HTTPStatus
 
 # Struttura ROOMS:
 # { "nome_stanza": { "password": "123", "clients": { websocket: "nome_utente" } } }
 ROOMS = {}
+
+# Intercetta le richieste HTTP (es. /ping da cron-job.org) prima che vengano convertite in WebSocket
+async def process_request(path, headers):
+    if path == "/ping" or path == "/":
+        # Risponde 200 OK alle chiamate HTTP GET mantenendo il server attivo su Render
+        return HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
+    # Prosegue con la normale connessione WebSocket per tutti gli altri percorsi
+    return None
 
 async def handler(websocket):
     current_room = None
@@ -22,7 +31,6 @@ async def handler(websocket):
                     payload = header + message
 
                     # Inoltra a TUTTI gli altri client nella stanza
-                    # (Permette a più persone di trasmettere e ricevere contemporaneamente)
                     for client in list(ROOMS[current_room]["clients"].keys()):
                         if client != websocket:
                             try:
@@ -71,7 +79,8 @@ async def handler(websocket):
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
-    async with websockets.serve(handler, "0.0.0.0", port):
+    # Aggiunto process_request per gestire il keepalive HTTP
+    async with websockets.serve(handler, "0.0.0.0", port, process_request=process_request):
         print(f"Server attivo sulla porta {port}...")
         await asyncio.Future()
 
