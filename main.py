@@ -18,6 +18,26 @@ rooms: Dict[str, dict] = {
     }
 }
 
+# Funzione per inviare la lista aggiornata degli utenti a tutti i membri di una stanza
+async def broadcast_room_users(room_name: str):
+    if room_name not in rooms:
+        return
+    
+    # Estrae tutti i nomi utente unici o associati ai websocket attivi in quella stanza
+    users_list = list(rooms[room_name]["clients"].values())
+    
+    payload = json.dumps({
+        "action": "users",
+        "users": users_list
+    })
+
+    # Invia la lista a tutti i client della stanza
+    for client in list(rooms[room_name]["clients"].keys()):
+        try:
+            await client.send_text(payload)
+        except:
+            pass
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -46,7 +66,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         }))
                         continue
                 else:
-                    # Se l'azione è creare una nuova stanza
+                    # Se l'azione è creare una stanza nuova
                     if data.get("create", False):
                         rooms[room_name] = {
                             "password": password,
@@ -59,9 +79,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         }))
                         continue
 
+                # Salva la vecchia stanza prima di cambiarla
+                old_room = current_room
+
                 # Rimuovi il client dalla stanza precedente se era già connesso altrove
-                if current_room in rooms and websocket in rooms[current_room]["clients"]:
-                    del rooms[current_room]["clients"][websocket]
+                if old_room in rooms and websocket in rooms[old_room]["clients"]:
+                    del rooms[old_room]["clients"][websocket]
+                    # Aggiorna la lista nella vecchia stanza
+                    await broadcast_room_users(old_room)
 
                 # Aggiungi il client alla nuova stanza
                 current_room = room_name
@@ -71,6 +96,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     "status": "success",
                     "message": f"Entrato nella stanza {current_room}"
                 }))
+
+                # AGGIORNAMENTO: Invia la nuova lista utenti a tutta la stanza
+                await broadcast_room_users(current_room)
 
             elif action == "audio" or action == "talk":
                 # Inoltra il pacchetto audio/voce a tutti gli altri utenti nella stessa stanza
@@ -92,6 +120,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             pass
 
     except WebSocketDisconnect:
-        # Gestisci la disconnessione pulendo le stanze
+        # Gestisci la disconnessione pulendo le stanze e aggiornando la lista utenti rimasti
         if current_room in rooms and websocket in rooms[current_room]["clients"]:
             del rooms[current_room]["clients"][websocket]
+            await broadcast_room_users(current_room)
