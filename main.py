@@ -4,6 +4,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
 
+# --- Rotta keepalive per evitare lo spegnimento su Render (richiesta da cron-job.org) ---
+@app.get("/ping")
+async def ping_server():
+    return {"status": "alive"}
+
 # Struttura per gestire le stanze e i client connessi
 # Formato rooms = { "Global": { "password": "", "clients": { websocket: username } } }
 rooms: Dict[str, dict] = {
